@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ToxikChat</title>
+    <style>
+        html{
+        
+        }
+        input[type=text] {
+          transition: width 0.4s slide-in;
+            background-color: lightgray;
+            border: solid black 4px;
+            
+        }
+        @keyframes slide-in {
+          from {
+            translate: 150vw 0;
+            scale: 200% 1;
+          }
+
+          to {
+            translate: 0 0;
+            scale: 100% 1;
+          }
+        }
+        input[type=text]:focus {
+          width: 100%;
+        }
+
+        body {
+            background: linear-gradient(to right, red, black);
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            overflow: hidden;
+        }
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: -250px;
+            width: -250px;
+            height: 100%;
+            background-color: rgba(250, 100, 100, 0.7);
+            color: white;
+            overflow-y: auto;
+            transition: 0.3s;
+            padding: 10px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+            z-index: 1002;
+        }
+        .sidebar.open {
+            left: 0;
+        }
+        .sidebar h2 {
+            margin-top: 0;
+        }
+        .sidebar ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .sidebar ul li {
+            margin: 5px 0;
+        }
+        #sidebar-toggle {
+            position: relative;
+            top: 10px;
+            left: 10px;
+            background-color: #000000;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+            flex-direction: column;
+        }
+        #overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        #overlay.show {
+            display: block;
+        }
+        #messages {
+            list-style-type: none;
+            padding: 0;
+            margin: 50px 10px 0 10px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        #messages li {
+            margin: 5px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #form {
+            display: flex;
+            margin: 10px;
+        }
+        #input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #send {
+            padding: 10px;
+            border: none;
+            background-color: #ff0015;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #error-message {
+            color: red;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <button id="sidebar-toggle">Show Users</button>
+    <div id="overlay"></div>
+    <div class="sidebar" id="user-sidebar">
+        <h2>Connected Users</h2>
+        <ul id="user-list"></ul>
+    </div>
+<br>
+    <br>
+    <h1 style="text-decoration:underline;">ToxChat</h1>
+    <div id="username-section">
+        <label for="username">Username:</label>
+        <input id="username" type="text" placeholder="Enter your username" />
+        <button id="set-username">Set Username</button>
+        <p id="error-message"></p>
+    </div>
+    <ul id="messages"></ul>
+    <form id="form" action="" style="display: none;">
+        <input id="input" autocomplete="off" placeholder="Type a message..." />
+        <button id="send">Send</button>
+    </form>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script>const socket = io();
+        const usernameInput = document.getElementById('username');
+        const setUsernameButton = document.getElementById('set-username');
+        const errorMessage = document.getElementById('error-message');
+        const form = document.getElementById('form');
+        const input = document.getElementById('input');
+        const messages = document.getElementById('messages');
+        const sidebar = document.getElementById('user-sidebar');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const overlay = document.getElementById('overlay');
+        const userList = document.getElementById('user-list');
+
+        let username = '';
+
+        // Handle username setting
+        setUsernameButton.addEventListener('click', () => {
+            const desiredUsername = usernameInput.value.trim();
+            if (desiredUsername) {
+                socket.emit('set username', desiredUsername, (response) => {
+                    if (response.success) {
+                        username = desiredUsername;
+                        usernameInput.disabled = true;
+                        setUsernameButton.disabled = true;
+                        errorMessage.textContent = '';
+                        form.style.display = 'flex';
+                    } else {
+                        errorMessage.textContent = response.message;
+                    }
+                });
+            } else {
+                errorMessage.textContent = 'Username cannot be empty';
+            }
+        });
+
+        // Handle form submission
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (input.value) {
+                socket.emit('chat message', input.value);
+                input.value = '';
+            }
+        });
+
+        // Sidebar toggle
+        sidebarToggle.addEventListener('click', () => {
+            sidebar.classList.add('open');
+            overlay.classList.add('show');
+        });
+
+        // Close sidebar when clicking on the overlay
+        overlay.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('show');
+        });
+
+        // Display previous messages
+        socket.on('load messages', (messagesList) => {
+            messagesList.forEach(({ username, message, timestamp }) => {
+                const item = document.createElement('li');
+                item.textContent = `[${new Date(timestamp).toLocaleTimeString()}] ${username}: ${message}`;
+                messages.appendChild(item);
+            });
+        });
+
+        // Display new chat messages
+        socket.on('chat message', ({ username, message }) => {
+            const item = document.createElement('li');
+            item.textContent = `${username}: ${message}`;
+            messages.appendChild(item);
+        });
+
+        // Update the user list
+        socket.on('update users', (users) => {
+            userList.innerHTML = ''; // Clear the list
+            users.forEach((user) => {
+                const item = document.createElement('li');
+                item.textContent = user;
+                userList.appendChild(item);
+            });
+        });</script>
+</body>
+</html>
